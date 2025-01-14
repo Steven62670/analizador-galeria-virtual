@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analizador de Imágenes</title>
+  <style>
+    body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+    }
+    #result {
+        margin-top: 20px;
+    }
+    input[type="file"] {
+        margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+<h1>Sube una imagen para analizarla</h1>
+<form id="uploadForm" enctype="multipart/form-data">
+  <input type="file" id="image" name="image" required />
+  <button type="submit">Subir Imagen</button>
+</form>
+
+<div id="result"></div>
+
+<script>
+  document.getElementById("uploadForm").addEventListener("submit", async function(e) {
+      e.preventDefault();
+
+      const formData = new FormData();
+      const imageFile = document.getElementById("image").files[0];
+      formData.append("image", imageFile);
+
+      const response = await fetch("/upload", {
+          method: "POST",
+          body: formData
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+          document.getElementById("result").innerHTML = `
+              <h3>Imagen procesada: ${data.filename}</h3>
+              <p>Status: ${data.status}</p>
+          `;
+      } else {
+          document.getElementById("result").innerHTML = `
+              <p>Error al procesar la imagen.</p>
+          `;
+      }
+  });
+</script>
+</body>
+</html>
