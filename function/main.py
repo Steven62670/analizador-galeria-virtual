@@ -1,73 +1,30 @@
 import os
-from google.cloud import storage, firestore, vision
-from flask import jsonify
+from google.cloud import firestore, vision
 
-# Inicializar los clientes de GCP
-storage_client = storage.Client()
-vision_client = vision.ImageAnnotatorClient()
-firestore_client = firestore.Client()
+def process_image(event, context):
+    """Analiza una imagen al detectarse en el bucket."""
+    bucket_name = event['bucket']
+    file_name = event['name']
 
-# Nombre del bucket de GCP
-BUCKET_NAME = os.getenv("BUCKET_NAME", "analisis-imagenes")
+    # Validar que el bucket sea el esperado
+    if bucket_name != 'analisis-imagenes':
+        print(f"Skipping file {file_name} in bucket {bucket_name}. Not the expected bucket.")
+        return
 
-# Función para subir la imagen al bucket
-def upload_to_bucket(file):
-    """Sube el archivo al bucket de GCP y devuelve la URL pública."""
-    filename = file.filename
-    blob = storage_client.bucket(BUCKET_NAME).blob(filename)
-    blob.upload_from_file(file)
-    blob.make_public()
-    file_url = blob.public_url
-    return file_url
+    # Procesar la imagen con Vision API
+    client = vision.ImageAnnotatorClient()
+    image = vision.Image(source=vision.ImageSource(image_uri=f'gs://{bucket_name}/{file_name}'))
+    response = client.text_detection(image=image)
 
-# Función para hacer la transcripción usando Google Cloud Vision
-def transcribe_image(image_path):
-    """Transcribe el texto de una imagen usando la API de Google Cloud Vision."""
-    image = vision.Image()
-    image.source.image_uri = image_path
-    response = vision_client.text_detection(image=image)
-    texts = response.text_annotations
-    if texts:
-        return texts[0].description
-    return None
+    if response.error.message:
+        raise Exception(f"Cloud Vision Error: {response.error.message}")
 
-# Función para guardar los datos en Firestore
-def save_to_firestore(image_url, extracted_text):
-    """Guarda los resultados en Firestore."""
-    doc_ref = firestore_client.collection('notas_transcritas').document()
-    doc_ref.set({
-        'image_url': image_url,
-        'extracted_text': extracted_text
+    text = response.text_annotations[0].description if response.text_annotations else ""
+
+    # Guardar resultados en Firestore
+    db = firestore.Client()
+    db.collection('notes').document(file_name).set({
+        "file_name": file_name,
+        "text": text
     })
-
-# Función que se llamará desde Google Cloud Functions
-def process_image(request):
-    """Maneja la subida de una imagen y su procesamiento."""
-
-    # Verificar que la solicitud sea POST
-    if request.method != 'POST':
-        return 'Invalid request method', 405
-
-    # Obtener el archivo de la solicitud
-    file = request.files.get('file')
-    if not file:
-        return jsonify({'error': 'No file uploaded'}), 400
-
-    try:
-        # Subir la imagen al bucket
-        image_url = upload_to_bucket(file)
-
-        # Transcribir la imagen usando Cloud Vision
-        extracted_text = transcribe_image(image_url)
-
-        # Guardar los datos en Firestore
-        if extracted_text:
-            save_to_firestore(image_url, extracted_text)
-
-        # Retornar la URL de la imagen y el texto extraído
-        return jsonify({
-            'image_url': image_url,
-            'extracted_text': extracted_text or 'No se pudo extraer texto'
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    print(f"Processed file {file_name} and saved results to Firestore.")

@@ -1,10 +1,17 @@
+# Usar la imagen base de Python 3.9
 FROM python:3.9-slim
 
-ENV PYTHONBUFFERED True
+# Establecer el directorio de trabajo
+WORKDIR /app
 
-WORKDIR .
-COPY . ./
+# Copiar los archivos del proyecto al contenedor
+COPY . /app
 
-RUN pip install -r requirements.txt
+# Instalar las dependencias
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+# Exponer el puerto 8080
+EXPOSE 8080
+
+# Ejecutar la aplicación
+CMD ["python", "main.py"]
