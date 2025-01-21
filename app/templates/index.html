@@ -57,23 +57,35 @@
         button:hover {
             background-color: #5a6268;
         }
-        #result {
+        #loading {
+            display: none;
+            margin-top: 20px;
+            font-size: 1rem;
+            color: #6c757d;
+        }
+        #result-container {
+            display: none;
             margin-top: 40px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+        }
+        .result-box {
+            flex: 1;
             padding: 25px;
             background-color: #f8f9fa;
             border: 1px solid #e0e0e0;
             border-radius: 12px;
-            display: none;
-            width: 100%;
-            max-width: 420px;
             box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
         }
-        #result h2 {
+        .result-box h2 {
             margin-bottom: 15px;
             font-size: 1.4rem;
             color: #343a40;
         }
-        #textResult {
+        .result-box p {
             font-size: 1rem;
             color: #495057;
             line-height: 1.6;
@@ -93,27 +105,41 @@
     <button type="submit">Subir y Analizar</button>
 </form>
 
-<div id="result">
-    <h2>Resultado de la Transcripción</h2>
-    <p id="textResult"></p>
+<p id="loading">Procesando imagen, por favor espera...</p>
+
+<div id="result-container">
+    <div class="result-box">
+        <h2>Texto Detectado</h2>
+        <p id="textResult"></p>
+    </div>
+    <div class="result-box" id="translatedSection" style="display: none;">
+        <h2>Traducción</h2>
+        <p id="translatedResult"></p>
+    </div>
 </div>
 <p class="error" id="errorMessage"></p>
 
 <script>
     const form = document.getElementById("uploadForm");
     const fileInput = document.getElementById("fileInput");
-    const resultDiv = document.getElementById("result");
+    const resultContainer = document.getElementById("result-container");
     const textResult = document.getElementById("textResult");
+    const translatedResult = document.getElementById("translatedResult");
+    const translatedSection = document.getElementById("translatedSection");
     const errorMessage = document.getElementById("errorMessage");
+    const loading = document.getElementById("loading");
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
         errorMessage.textContent = "";
-        resultDiv.style.display = "none";
+        resultContainer.style.display = "none";
+        translatedSection.style.display = "none";
+        loading.style.display = "block";
 
         const file = fileInput.files[0];
         if (!file) {
             errorMessage.textContent = "Por favor, selecciona una imagen.";
+            loading.style.display = "none";
             return;
         }
 
@@ -132,9 +158,17 @@
 
             const data = await response.json();
             textResult.textContent = data.text;
-            resultDiv.style.display = "block";
+
+            if (data.translated_text && data.translated_text !== data.text) {
+                translatedResult.textContent = data.translated_text;
+                translatedSection.style.display = "block";
+            }
+
+            resultContainer.style.display = "flex";
         } catch (error) {
             errorMessage.textContent = error.message;
+        } finally {
+            loading.style.display = "none";
         }
     });
 </script>

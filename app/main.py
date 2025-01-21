@@ -1,7 +1,7 @@
 import logging
 import os
 from flask import Flask, render_template, request, jsonify
-from google.cloud import storage, firestore, vision
+from google.cloud import storage, firestore, vision, translate_v2 as translate
 
 # Configurar Logging
 logging.basicConfig(level=logging.INFO)
@@ -11,6 +11,7 @@ app = Flask(__name__)
 storage_client = storage.Client()
 firestore_client = firestore.Client()
 vision_client = vision.ImageAnnotatorClient()
+translate_client = translate.Client()
 
 # Nombre del bucket fijo
 BUCKET_NAME = 'analisis-imagenes'
@@ -21,7 +22,7 @@ def root():
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    """Sube una imagen al bucket y procesa la transcripción."""
+    """Sube una imagen al bucket y procesa la transcripción y traducción."""
     uploaded_file = request.files.get('file')
 
     if not uploaded_file:
@@ -40,12 +41,16 @@ def upload():
     image_uri = f"gs://{BUCKET_NAME}/{uploaded_file.filename}"
     text = analyze_text(image_uri)
 
+    # Traducir texto si está en inglés
+    translated_text = translate_text(text, target_language='es') if text else ""
+
     # Guardar en Firestore
-    save_to_firestore(uploaded_file.filename, text)
+    save_to_firestore(uploaded_file.filename, text, translated_text)
 
     return jsonify({
         "message": "File uploaded and processed successfully.",
-        "text": text
+        "text": text,
+        "translated_text": translated_text
     })
 
 def analyze_text(image_uri):
@@ -58,12 +63,23 @@ def analyze_text(image_uri):
 
     return response.text_annotations[0].description if response.text_annotations else ""
 
-def save_to_firestore(file_name, text):
-    """Guarda los resultados de transcripción en Firestore."""
+def translate_text(text, target_language='es'):
+    """Traduce el texto detectado si está en inglés."""
+    detection = translate_client.detect_language(text)
+    source_language = detection.get("language", "")
+
+    if source_language == 'en':
+        translation = translate_client.translate(text, target_language=target_language)
+        return translation.get("translatedText", "")
+    return text
+
+def save_to_firestore(file_name, text, translated_text):
+    """Guarda los resultados de transcripción y traducción en Firestore."""
     doc_ref = firestore_client.collection('notes').document(file_name)
     doc_ref.set({
         "file_name": file_name,
-        "text": text
+        "text": text,
+        "translated_text": translated_text
     })
     logging.info(f"Results saved to Firestore for {file_name}.")
 
@@ -74,5 +90,3 @@ def server_error(e):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
-
